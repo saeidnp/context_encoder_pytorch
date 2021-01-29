@@ -19,8 +19,8 @@ import utils
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--dataset',  default='streetview', help='cifar10 | lsun | imagenet | folder | lfw ')
-parser.add_argument('--dataroot',  default='dataset/train', help='path to dataset')
+parser.add_argument('--dataset',  default='cifar10', help='cifar10 | lsun | imagenet | folder | lfw ')
+parser.add_argument('--dataroot',  default='dataset/cifar10', help='path to dataset')
 parser.add_argument('--workers', type=int, help='number of data loading workers', default=2)
 parser.add_argument('--batchSize', type=int, default=64, help='input batch size')
 parser.add_argument('--imageSize', type=int, default=128, help='the height / width of the input image to network')
@@ -73,7 +73,7 @@ if opt.dataset in ['imagenet', 'folder', 'lfw']:
     # folder dataset
     dataset = dset.ImageFolder(root=opt.dataroot,
                                transform=transforms.Compose([
-                                   transforms.Scale(opt.imageSize),
+                                   transforms.Resize(opt.imageSize),
                                    transforms.CenterCrop(opt.imageSize),
                                    transforms.ToTensor(),
                                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
@@ -81,21 +81,21 @@ if opt.dataset in ['imagenet', 'folder', 'lfw']:
 elif opt.dataset == 'lsun':
     dataset = dset.LSUN(db_path=opt.dataroot, classes=['bedroom_train'],
                         transform=transforms.Compose([
-                            transforms.Scale(opt.imageSize),
+                            transforms.Resize(opt.imageSize),
                             transforms.CenterCrop(opt.imageSize),
                             transforms.ToTensor(),
                             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                         ]))
 elif opt.dataset == 'cifar10':
-    dataset = dset.CIFAR10(root=opt.dataroot, download=True,
+    dataset = dset.CIFAR10(root=opt.dataroot, download=False,
                            transform=transforms.Compose([
-                               transforms.Scale(opt.imageSize),
+                               transforms.Resize(opt.imageSize),
                                transforms.ToTensor(),
                                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                            ])
     )
 elif opt.dataset == 'streetview':
-    transform = transforms.Compose([transforms.Scale(opt.imageSize),
+    transform = transforms.Compose([transforms.Resize(opt.imageSize),
                                     transforms.CenterCrop(opt.imageSize),
                                     transforms.ToTensor(),
                                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
@@ -150,7 +150,7 @@ label = torch.FloatTensor(opt.batchSize)
 real_label = 1
 fake_label = 0
 
-real_center = torch.FloatTensor(opt.batchSize, 3, opt.imageSize/2, opt.imageSize/2)
+real_center = torch.FloatTensor(opt.batchSize, 3, opt.imageSize//2, opt.imageSize//2)
 
 if opt.cuda:
     netD.cuda()
@@ -189,7 +189,7 @@ for epoch in range(resume_epoch,opt.niter):
         label.data.resize_(batch_size).fill_(real_label)
 
         output = netD(real_center)
-        errD_real = criterion(output, label)
+        errD_real = criterion(output, label.unsqueeze(-1))
         errD_real.backward()
         D_x = output.data.mean()
 
@@ -199,7 +199,7 @@ for epoch in range(resume_epoch,opt.niter):
         fake = netG(input_cropped)
         label.data.fill_(fake_label)
         output = netD(fake.detach())
-        errD_fake = criterion(output, label)
+        errD_fake = criterion(output, label.unsqueeze(-1))
         errD_fake.backward()
         D_G_z1 = output.data.mean()
         errD = errD_real + errD_fake
@@ -212,7 +212,7 @@ for epoch in range(resume_epoch,opt.niter):
         netG.zero_grad()
         label.data.fill_(real_label)  # fake labels are real for generator cost
         output = netD(fake)
-        errG_D = criterion(output, label)
+        errG_D = criterion(output, label.unsqueeze(-1))
         # errG_D.backward(retain_variables=True)
 
         # errG_l2 = criterionMSE(fake,real_center)
@@ -233,7 +233,7 @@ for epoch in range(resume_epoch,opt.niter):
 
         print('[%d/%d][%d/%d] Loss_D: %.4f Loss_G: %.4f / %.4f l_D(x): %.4f l_D(G(z)): %.4f'
               % (epoch, opt.niter, i, len(dataloader),
-                 errD.data[0], errG_D.data[0],errG_l2.data[0], D_x,D_G_z1, ))
+                 errD.item(), errG_D.item(),errG_l2.item(), D_x.item(), D_G_z1.item(), ))
         if i % 100 == 0:
             vutils.save_image(real_cpu,
                     'result/train/real/real_samples_epoch_%03d.png' % (epoch))
